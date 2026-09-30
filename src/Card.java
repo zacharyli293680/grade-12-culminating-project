@@ -1,39 +1,29 @@
 // blueprint for card object
 
-// imports
-import java.util.*;
-import java.io.*;
-
 // card class
 public class Card {
 	
 	// fields
-	private String[] suits = {"Diamonds", "Clubs", "Hearts", "Spades"};
-	private String[] ranks = {"Ace", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Jack", "Queen", "King"};
+	private static final String[] SUITS = {"Diamonds", "Clubs", "Hearts", "Spades"};
+	private static final String[] RANKS = {"Ace", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Jack", "Queen", "King"};
 	private String suit;
 	private String rank;
-	private int cardNum;
+	private int cardNum; // 1 to 52, matches the card image file names
 	private int value;
 	
 	// constructor
+	// parameters: int card index 0-51, String game
 	public Card(int cardNum, String game) {
 		this.cardNum = cardNum + 1;
-		this.suit = suits[cardNum / 13];
-		this.rank = ranks[cardNum % 13];
-		if (game.equals("Blackjack")) { // for blackjack
-			int tempValue = (cardNum % 13) + 1;
-			if (tempValue > 10) {
-				tempValue = 10;
-			} else if (tempValue == 0) {
-				tempValue = 11;
-			}
-			this.value = tempValue;
-		} else if (game.equals("Baccarat")) { // for baccarat
-			int tempValue = (cardNum % 13);
-			if (tempValue >= 10) {
-				tempValue = 0;
-			}
-			this.value = tempValue;
+		this.suit = SUITS[cardNum / 13];
+		this.rank = RANKS[cardNum % 13];
+		int rankValue = (cardNum % 13) + 1; // Ace = 1 ... King = 13
+		if (game.equals("Blackjack")) { // ace counts as 1 here, Hand adds the soft 10
+			this.value = Math.min(rankValue, 10);
+		} else if (game.equals("Baccarat")) { // ten and face cards count as 0
+			this.value = rankValue >= 10 ? 0 : rankValue;
+		} else {
+			this.value = rankValue;
 		}
 	}
 	
@@ -50,13 +40,24 @@ public class Card {
 		return suit;
 	}
 	
+	// index of the card 0-51
 	public int getNum() {
 		return cardNum - 1;
 	}
 	
+	// number of the image file for this card (1-52)
+	public int getImageNum() {
+		return cardNum;
+	}
+	
+	// rank index 0-12 (Ace = 0 ... King = 12) regardless of suit
+	public int getRankIndex() {
+		return (cardNum - 1) % 13;
+	}
+	
 	// toString
 	public String toString() {
-		return String.format(this.rank + " of " + this.suit + " value :" + cardNum);
+		return this.rank + " of " + this.suit + " value :" + value;
 	}
 	
 }

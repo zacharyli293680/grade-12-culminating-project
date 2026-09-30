@@ -2,178 +2,168 @@
 
 // imports
 import java.util.*;
-import java.io.*;
-import java.awt.*;
 import javax.swing.*;
 
 // dragontower class
-public class Dragontower {
-	
+public class Dragontower extends Game {
+
 	// fields
+	private static final int ROWS = 9;
+	private static final int COLS = 4;
 	public Player player;
 	public int bet = 0;
 	public String difficulty;
 	public ArrayList<ArrayList<Cell>> grid;
-	public int multiplier;
-	private Map<Integer, Odds> easyMultipliers = initializeMultiplierArray(3);
-	private Map<Integer, Odds> mediumMultipliers = initializeMultiplierArray(2);
-	private Map<Integer, Odds> hardMultipliers = initializeMultiplierArray(1);
-	
+	private int mode; // safe cells per row: easy 3, medium 2, hard 1
+	private int rowsCleared;
+	private boolean inProgress;
+	private Map<Integer, Odds> multipliers; // rows cleared -> odds (win : loss) for the current difficulty
+
 	// constructor
 	public Dragontower(Player player) {
 		this.player = player;
 		grid = new ArrayList<ArrayList<Cell>>();
 	}
-	
-	// initialize the multiplier maps
-	// parameters: int difficulty
-	// return: Map with all the odds
+
+	// initialize the multiplier map for a difficulty: after k rows the fair multiplier is (4 / safe)^k
+	// parameters: int safe cells per row
+	// return: Map from rows cleared to odds
 	public Map<Integer, Odds> initializeMultiplierArray (int mode){
 		Map<Integer, Odds> multipliers = new HashMap<Integer, Odds>();
-		for (int i = 0; i < 9; i++) {
-			multipliers.put(8 - i, new Odds((int)(Math.pow(mode, i + 1)), (int)(Math.pow(4, i + 1))));
+		for (int k = 0; k <= ROWS; k++) {
+			multipliers.put(k, new Odds((int)(Math.pow(mode, k)), (int)(Math.pow(COLS, k))));
 		}
 		return multipliers;
 	}
-	
-	// calculates the payout if player chashes out
-	// paramters: int rank
+
+	// calculates the total payout (stake included) for the rows cleared so far
+	// parameters: none
 	// return: int winnings
-	public int calcPayout(int rank) {
-		if (difficulty.equalsIgnoreCase("easy")) {
-			return Game.calculateWinnings(bet, easyMultipliers.get(rank).getLoss(), easyMultipliers.get(rank).getWin());
-		} else if (difficulty.equalsIgnoreCase("medium")) {
-			return Game.calculateWinnings(bet, mediumMultipliers.get(rank).getLoss(), mediumMultipliers.get(rank).getWin());
-		} else {
-			return Game.calculateWinnings(bet, hardMultipliers.get(rank).getLoss(), 1);
-		}
+	public int calcPayout() {
+		Odds odds = multipliers.get(rowsCleared);
+		long payout = ((long) bet * odds.getLoss()) / odds.getWin();
+		return (int) Math.min(payout, Integer.MAX_VALUE);
 	}
-	
-	// calculates the multiplier for winnings calculation
-	// parameters: int rank
+
+	// calculates the multiplier for display
+	// parameters: none
 	// return: double multiplier
-	public double getMultiplier(int rank) {
-		double multiplier;
-		if (difficulty.equalsIgnoreCase("easy")) {
-			multiplier = easyMultipliers.get(rank).getLoss() * 1.0 / easyMultipliers.get(rank).getWin();
-		} else if (difficulty.equalsIgnoreCase("medium")) {
-			multiplier = mediumMultipliers.get(rank).getLoss() * 1.0 / mediumMultipliers.get(rank).getWin();
-		} else {
-			multiplier = hardMultipliers.get(rank).getLoss() * 1.0;
+	public double getMultiplier() {
+		if (multipliers == null) {
+			return 0;
 		}
-		return Math.round(multiplier * 100)/100.0;
+		Odds odds = multipliers.get(rowsCleared);
+		return Math.round(odds.getLoss() * 100.0 / odds.getWin()) / 100.0;
 	}
-	
-	// generates the grid for the game
+
+	// generates the grid for the game, with (4 - mode) eggs per row
 	// paramters: none
 	// return: none
 	public void generateGrid() {
-		if (grid != null) {
-			grid.clear();
+		grid.clear();
+		int eggsPerRow = COLS - mode;
+		for (int i = 0; i < ROWS; i++) {
+			ArrayList<Integer> nums = new ArrayList<Integer>();
+			for (int j = 0; j < COLS; j++) {
+				nums.add(j);
+			}
+			Collections.shuffle(nums);
+			Set<Integer> eggCols = new HashSet<Integer>(nums.subList(0, eggsPerRow));
+			ArrayList<Cell> row = new ArrayList<Cell>();
+			for (int j = 0; j < COLS; j++) {
+				row.add(new Cell(j, i, eggCols.contains(j)));
+			}
+			grid.add(row);
 		}
-		if (difficulty.equalsIgnoreCase("easy")) {
-			for (int i = 0; i < 9; i++) {
-				int eggCell = (int)(Math.random()*((3) + 1));
-				ArrayList<Cell> row = new ArrayList<Cell>();
-				for (int j = 0; j < 4; j++) {
-					if(j == eggCell) {
-						row.add(new Cell(j, i, true));
-					} else {
-						row.add(new Cell(j, i, false));
-					}
-				}
-				grid.add(row);
-			}
-		} else if (difficulty.equalsIgnoreCase("medium")) {
-			for (int i = 0; i < 9; i++) {
-				ArrayList<Integer> nums = new ArrayList<Integer>();
-				for (int j = 0; j < 4; j++) {
-					nums.add(j);
-				}
-				Collections.shuffle(nums);
-				ArrayList<Cell> row = new ArrayList<Cell>();
-				for (int k = 0; k < 4; k++) {
-					if (k == nums.get(0) || k == nums.get(1)) {
-						row.add(new Cell(k, i, true));
-					} else {
-						row.add(new Cell(k, i, false));
-					}
-				}
-				grid.add(row);
-			}
-		} else {
-			for (int i = 0; i < 9; i++) {
-				int notEggCell = (int)(Math.random() * ((3) + 1));
-				ArrayList<Cell> row = new ArrayList<Cell>();
-				for (int j = 0; j < 4; j++) {
-					if(j == notEggCell){
-						row.add(new Cell(j, i, false));
-					} else {
-						row.add(new Cell(j, i, true));
-					}
-				}
-				grid.add(row);
-			}
-		}
-		System.out.println(grid);
+		rowsCleared = 0;
+		inProgress = true;
 	}
-	// checks a cell for egg 
-	// paramters: int x, int y of mouse input
-	// return boolean for egg
-	public boolean checkCell(int y, int x) {
-		grid.get(y).get(x).setChecked(true);
-		Cell c = grid.get(y).get(x);
+
+	// checks a cell in the current row; a safe cell moves the player up one row, an egg ends the game
+	// paramters: int col of the clicked cell
+	// return boolean for safe
+	public boolean checkCell(int col) {
+		Cell c = grid.get(getCurrentRow()).get(col);
+		c.setChecked(true);
 		if (c.getEgg()) {
+			inProgress = false;
 			return false;
+		}
+		rowsCleared++;
+		if (rowsCleared == ROWS) {
+			inProgress = false;
 		}
 		return true;
 	}
-	
+
+	// pays out the current multiplier and ends the round
+	// parameters: none
+	// return: int payout
+	public int cashOut() {
+		int payout = calcPayout();
+		player.recordWin(payout);
+		inProgress = false;
+		return payout;
+	}
+
 	// gets player bets and difficulty
 	// parameters: none
-	// return: void
-	public void getBet() {
-		
-		// for difficulty
+	// return: boolean for whether a bet was placed
+	public boolean getBet() {
 		String[] options = {"Easy", "Medium", "Hard"};
-		int difficult = JOptionPane.showOptionDialog(null, "Chose Difficulty", "Chose", 0, 3, null, options, options[0]);
+		int difficult = JOptionPane.showOptionDialog(null, "Choose Difficulty", "Choose", 0, 3, null, options, options[0]);
+		if (difficult < 0) {
+			return false;
+		}
+		int amount = promptBet(player, "Enter bet: ");
+		if (amount < 0) {
+			return false;
+		}
 		if (difficult == 0) {
 			difficulty = "easy";
+			mode = 3;
 		} else if (difficult == 1) {
 			difficulty = "medium";
+			mode = 2;
 		} else {
 			difficulty = "hard";
+			mode = 1;
 		}
-		
-		// for bets
-		boolean validInput = false;
-		while (!validInput) {
-			try {
-				bet = Integer.parseInt(JOptionPane.showInputDialog("Enter bet: "));
-				if (bet > 0 && bet < player.getBalance()) {
-					validInput = true;
-				}
-			} catch (NumberFormatException e) {
-				JOptionPane.showMessageDialog(null, "Invalid Input");
-			}
-		}
-		player.setBalance(player.getBalance() - bet);
-		player.setWagered(player.getWagered() + bet);
+		multipliers = initializeMultiplierArray(mode);
+		bet = amount;
+		return true;
 	}
-	
+
 	// getters and setters
 	public int getCellCol(int x) {
-		x -=450;
+		x -= 450;
 		return x / 106;
 	}
-	
+
 	public int getCellRow(int y) {
 		y -= 243;
 		return y / 50;
 	}
-	
+
 	public int getBetAmount() {
 		return bet;
 	}
-	
+
+	// the row the player must click next (8 = bottom, -1 once the tower is finished)
+	public int getCurrentRow() {
+		return ROWS - 1 - rowsCleared;
+	}
+
+	public int getRowsCleared() {
+		return rowsCleared;
+	}
+
+	public boolean isInProgress() {
+		return inProgress;
+	}
+
+	public boolean isFinished() {
+		return rowsCleared == ROWS;
+	}
+
 }

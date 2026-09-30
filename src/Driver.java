@@ -17,9 +17,8 @@ import java.io.*;
 public class Driver extends JPanel implements MouseListener {
 	
 	// global variable
+	private static final String PLAYER_FILE = "players.txt";
 	JPanel myPanel;
-	JFrame frame;
-	Toolkit t = Toolkit.getDefaultToolkit();
 	static Clip backgroundMusic;
 	public static int screen = 0;
 	private Player player;
@@ -34,7 +33,6 @@ public class Driver extends JPanel implements MouseListener {
 	// baccarat variables
 	public Baccarat baccarat;
 	private boolean betting = true;
-	private String betType;
 
 	// poker variables
 	public Poker poker;
@@ -47,27 +45,22 @@ public class Driver extends JPanel implements MouseListener {
 
 	// dragontower variables
 	public Dragontower dragontower;
-	private boolean dragontowerBetting;
-	private boolean drawRow;
-	private int currentRow;
-	private Set<Cell>dragontowerCheckedCells = new HashSet<>();
 
 	// mines variables
 	public Mines mines;
 	private boolean minesBetting = false;
 	private Set<Cell> minesCheckedCells = new HashSet<>();
-	
-	
+
+
 	private final Font ARIAL_BIG = new Font("Arial", Font.PLAIN, 28);
 	private final Font ARIAL_SMALL = new Font("Arial", Font.PLAIN, 13);
 
-	
+
 	// driver constructor
 	public Driver() {
 	    setPreferredSize(new Dimension(1000, 750));
 	    setBackground(new Color(255, 255, 255));
 	    setFont(ARIAL_BIG);
-	    frame = new JFrame("Poker Home Screen");
 	    myPanel = new JPanel();
 	    myPanel.setLayout(null);
 	    myPanel.setBackground(Color.WHITE);
@@ -77,47 +70,78 @@ public class Driver extends JPanel implements MouseListener {
 	        AudioInputStream sound = AudioSystem.getAudioInputStream(new File("gdmusic.wav"));
 	        backgroundMusic = AudioSystem.getClip();
 	        backgroundMusic.open(sound);
-	        backgroundMusic.start();
+	        backgroundMusic.loop(Clip.LOOP_CONTINUOUSLY);
 	    } catch (Exception e) {
 	        System.out.println("No music found");
 	    }
 	}
 
-	
-	// method gets players
+
+	// method gets players: looks the name up with a binary search on the name-sorted list, or adds a new player
 	// parameters: none
 	// return: void
 	public void getPlayer() {
 	    String name = JOptionPane.showInputDialog("Enter player name: ");
+	    if (name == null) {
+	        return; // cancelled
+	    }
+	    name = name.trim();
+	    if (name.isEmpty() || name.contains(" ")) {
+	        JOptionPane.showMessageDialog(myPanel, "Enter a name with no spaces");
+	        return;
+	    }
 	    int index = Collections.binarySearch(players, new Player(name));
 	    if (index >= 0) {
 	        player = players.get(index);
 	    } else {
-	        int insertionPoint = -(index + 1);  
+	        int insertionPoint = -(index + 1);
 	        Player newPlayer = new Player(name);
 	        players.add(insertionPoint, newPlayer);
 	        player = newPlayer;
+	        savePlayers();
 	    }
 	    selectedPlayer = true;
 	}
 
-	// method intialized players from text file
+	// method initializes players from the text file and sorts them by name for binary search
 	// parameters: none
 	// return: void
 	public static void initializePlayers() {
 		try {
-			BufferedReader inFile = new BufferedReader(new FileReader("players.txt"));
+			BufferedReader inFile = new BufferedReader(new FileReader(PLAYER_FILE));
 			String line;
 			while((line = inFile.readLine()) != null) {
+				line = line.trim();
+				if (line.isEmpty() || !line.contains(" ")) {
+					continue;
+				}
 				String name = line.substring(0, line.indexOf(" "));
-				int balance = Integer.parseInt(line.substring(line.indexOf(" ") + 1));
+				int balance = Integer.parseInt(line.substring(line.indexOf(" ") + 1).trim());
 				players.add(new Player(name, balance));
 			}
 			inFile.close();
 		} catch (FileNotFoundException e) {
 			System.out.println("file not found");
-		} catch (IOException e) {
+		} catch (IOException | NumberFormatException e) {
 			System.out.println("reading error");
+		}
+		Collections.sort(players);
+	}
+
+	// method writes players back to the text file as a leaderboard, richest first
+	// parameters: none
+	// return: void
+	public static void savePlayers() {
+		ArrayList<Player> leaderboard = new ArrayList<>(players);
+		Collections.sort(leaderboard, new CompareBalance().reversed());
+		try {
+			PrintWriter outFile = new PrintWriter(new FileWriter(PLAYER_FILE));
+			for (Player p : leaderboard) {
+				outFile.println(p);
+			}
+			outFile.close();
+		} catch (IOException e) {
+			System.out.println("saving error");
 		}
 	}
 	
@@ -223,7 +247,7 @@ public class Driver extends JPanel implements MouseListener {
 		g.setColor(Color.WHITE);
 		if (dragontower != null && dragontower.difficulty != null) {
 			g.drawString("" + dragontower.getBetAmount(), 120, 180);
-			g.drawString("" + dragontower.getMultiplier(currentRow), 120, 430);
+			g.drawString("" + dragontower.getMultiplier() + "x", 120, 430);
 		} else {
 			g.drawString("0", 120, 180);
 			g.drawString("0x", 120, 430);
@@ -242,15 +266,10 @@ public class Driver extends JPanel implements MouseListener {
 		g.setFont(ARIAL_BIG);
 		if (mines != null) {
 			g.drawString("" + mines.getBet(), 120, 180);
-			if (mines.checkedCells > 0) {
-				mines.calculateMultiplier(mines.multipliers.get(mines.checkedCells).get(25 - mines.getDiamonds()));
-				g.drawString("" + mines.getMultiplier(), 120, 430);
-			} else {
-				g.drawString("0x", 120, 430);
-			}
+			g.drawString("" + mines.getMultiplier() + "x", 120, 430);
 		} else {
 			g.drawString("0", 120, 180);
-			g.drawString("0x", 120,  430);;
+			g.drawString("0x", 120,  430);
 		}
 	}
 	
@@ -322,45 +341,47 @@ public class Driver extends JPanel implements MouseListener {
 		g.drawImage(cardBack, x, y, 100, 150, this);
 	}
 	
-	// draws draw card front
+	// draws a card front; cardNum is the image number 1-52
 	public void drawCard(Graphics g, int x, int y, int cardNum) {
 		Toolkit t = Toolkit.getDefaultToolkit();
 		Image card = t.getImage((cardNum) + ".png");
 		g.drawImage(card, x, y, 100, 150, this);
 	}
-	
+
 	// draws player cards for blackjack
 	public void drawPlayerCardsBlackjack(Graphics g) {
 		for (int i = 0; i < blackjack.currentPlayerHand.getCards().size(); i++) {
-			drawCard(g, 325 + (i * 110), 500, blackjack.currentPlayerHand.getCards().get(i).getNum() + 1);
+			drawCard(g, 325 + (i * 110), 500, blackjack.currentPlayerHand.getCards().get(i).getImageNum());
 		}
 		g.setFont(ARIAL_BIG);
 		g.setColor(Color.WHITE);
 		g.drawString("" + blackjack.currentPlayerHand.getValue(), 650 , 705);
 		g.drawString("" + handNum, 520, 425);
 	}
-	
+
 	// draws dealer cards for blackjack
 	public void drawDealerCards(Graphics g, boolean actionOver) {
 		g.setFont(ARIAL_BIG);
 		g.setColor(Color.WHITE);
-		drawCard(g, 325, 185, blackjack.dealerHand.getCards().get(0).getNum());
+		Card upCard = blackjack.dealerHand.getCards().get(0);
+		drawCard(g, 325, 185, upCard.getImageNum());
 		if (!actionOver) {
 			drawCardBack(g, 435, 185);
-			g.drawString("" + blackjack.dealerHand.getCards().get(0).getValue(), 650, 150);
+			int upValue = upCard.getValue() == 1 ? 11 : upCard.getValue();
+			g.drawString("" + upValue, 650, 150);
 		} else {
 			for (int i = 0; i < blackjack.dealerHand.getCards().size(); i++) {
-				drawCard(g, 325 + (i * 110), 185, blackjack.dealerHand.getCards().get(i).getNum() + 1);
+				drawCard(g, 325 + (i * 110), 185, blackjack.dealerHand.getCards().get(i).getImageNum());
 			}
 			g.drawString("" + blackjack.dealerHand.getValue(), 650, 150);
 		}
 	}
-	
+
 	// draws player cards for baccarat
 	public void drawPlayerCardsBaccarat(Graphics g, boolean show) {
 		if (show) {
 			for (int i = 0; i < baccarat.playerHand.getCards().size(); i++) {
-				drawCard(g, 350 + (i * 115), 500, baccarat.playerHand.getCards().get(i).getNum());
+				drawCard(g, 350 + (i * 115), 500, baccarat.playerHand.getCards().get(i).getImageNum());
 			}
 			g.setFont(ARIAL_BIG);
 			g.setColor(Color.WHITE);
@@ -375,8 +396,8 @@ public class Driver extends JPanel implements MouseListener {
 	public void drawBankerCards(Graphics g, boolean show) {
 		if(show) {
 			for (int i = 0; i < baccarat.bankerHand.getCards().size(); i++) {
-				drawCard(g, 350 + (i *115), 200, baccarat.bankerHand.getCards().get(i).getNum());
-			} 
+				drawCard(g, 350 + (i *115), 200, baccarat.bankerHand.getCards().get(i).getImageNum());
+			}
 			g.setFont(ARIAL_BIG);
 			g.setColor(Color.WHITE);
 			g.drawString("" + baccarat.bankerHand.getValue(), 550, 150);
@@ -489,10 +510,9 @@ public class Driver extends JPanel implements MouseListener {
 		}
 	}
 	
-	// draws all the cells in a row
+	// draws the rows the player has already cleared
 	public void drawRowCells(Graphics g) {
-		currentRow++;
-		for (int row = 8; row >= currentRow; row--) {
+		for (int row = 8; row > dragontower.getCurrentRow(); row--) {
 			for (int col = 0; col < 4; col++) {
 				if (dragontower.grid.get(row).get(col).getEgg()) {
 					drawEgg(g, col, row);
@@ -501,7 +521,6 @@ public class Driver extends JPanel implements MouseListener {
 				}
 			}
 		}
-		currentRow--;
 	}
 
 	// draws egg cell
@@ -526,21 +545,23 @@ public class Driver extends JPanel implements MouseListener {
 	// paramters: none
 	// return: void
 	public void determineWinnerBlackjack() {
-		if (blackjack.currentPlayerHand.getValue() > blackjack.dealerHand.getValue() || 
-				blackjack.dealerHand.getValue() > 21) {
-			player.setBalance(player.getBalance() + Game.calculateWinnings(blackjack.currentPlayerHand.getBet(), 1, 1));
-			System.out.println(Game.calculateWinnings(blackjack.currentPlayerHand.getBet(), 1, 1));
-			player.setProfit(player.getBalance() - player.getInitialBalance());
-			player.setWins(player.getWins() + 1);
+		int playerValue = blackjack.currentPlayerHand.getValue();
+		int dealerValue = blackjack.dealerHand.getValue();
+		int handBet = blackjack.currentPlayerHand.getBet();
+		if (playerValue > 21) {
+			player.recordLoss();
+			repaint();
+			JOptionPane.showMessageDialog(myPanel, "Bust");
+		} else if (dealerValue > 21 || playerValue > dealerValue) {
+			player.recordWin(Game.calculateWinnings(handBet, 1, 1));
 			repaint();
 			JOptionPane.showMessageDialog(myPanel, "Winner");
-		} else if (blackjack.currentPlayerHand.getValue() < blackjack.dealerHand.getValue()){
-			player.setProfit(player.getProfit() - blackjack.currentPlayerHand.getBet());
-			player.setLosses(player.getLosses() + 1);
+		} else if (playerValue < dealerValue){
+			player.recordLoss();
 			repaint();
 			JOptionPane.showMessageDialog(myPanel, "Dealer wins");
 		} else {
-			player.setBalance(player.getBalance() + blackjack.currentPlayerHand.getBet());
+			player.recordPush(handBet);
 			repaint();
 			JOptionPane.showMessageDialog(myPanel, "Push");
 		}
@@ -590,10 +611,10 @@ public class Driver extends JPanel implements MouseListener {
 			}
 		} else if (screen == 5) {
 			dragontowerScreen(g);
-			if (dragontower != null && dragontower.grid != null && !dragontowerBetting && dragontower.grid.size() > 0) {
-				drawAllEggs(g);
-			}
-			if (dragontower != null && dragontower.grid != null && drawRow && dragontower.grid.size() > 0) {
+			if (dragontower != null && dragontower.grid.size() > 0) {
+				if (!dragontower.isInProgress()) {
+					drawAllEggs(g);
+				}
 				drawRowCells(g);
 			}
 
@@ -679,62 +700,60 @@ public class Driver extends JPanel implements MouseListener {
 				handNum = 1;
 			}
 			if (x > 870 && x < 980 && y > 15 && y < 75) {
+				if (playerAction) {
+					JOptionPane.showMessageDialog(myPanel, "Finish the hand first");
+					return;
+				}
 				screen = 0;
 				repaint();
 				blackjack = null;
-				playerAction = false;
 			} else if (x > 960 && x < 990 && y > 710 && y < 745) {
 				screen = 7;
 				repaint();
 			}
 			if (!playerAction && x > 20 && x < 285 && y > 380 && y < 435) {
-				blackjack.getPlayerBet();
+				if (!blackjack.getPlayerBet()) {
+					return;
+				}
 				blackjack.initializeHands();
 				playerAction = true;
 				repaint();
-				if (blackjack.currentPlayerHand.getBlackjack() && blackjack.dealerHand.getBlackjack()) {
-					JOptionPane.showMessageDialog(myPanel, "Push");
-					playerAction = false;
+				if (blackjack.currentPlayerHand.getBlackjack() || blackjack.dealerHand.getBlackjack()) {
+					playerAction = false; // natural blackjack ends the hand before any action
 					repaint();
-				} else if (blackjack.currentPlayerHand.getBlackjack()) {
-					JOptionPane.showMessageDialog(myPanel, "Blackjack");
-					player.setBalance(player.getBalance() + Game.calculateWinnings(blackjack.currentPlayerHand.getBet(), 3, 2));
-					player.setProfit(player.getBalance() - player.getInitialBalance());
-					player.setWins(player.getWins() + 1);
-					playerAction = false;
-					repaint();
-				} else if (blackjack.dealerHand.getBlackjack()) {
-					JOptionPane.showMessageDialog(myPanel, "Dealer Blackjack");
-					player.setProfit(player.getProfit() - blackjack.currentPlayerHand.getBet());
-					player.setLosses(player.getLosses() + 1);
-					playerAction = false;
+					if (blackjack.currentPlayerHand.getBlackjack() && blackjack.dealerHand.getBlackjack()) {
+						player.recordPush(blackjack.currentPlayerHand.getBet());
+						JOptionPane.showMessageDialog(myPanel, "Push - both have blackjack");
+					} else if (blackjack.currentPlayerHand.getBlackjack()) {
+						player.recordWin(Game.calculateWinnings(blackjack.currentPlayerHand.getBet(), 3, 2));
+						JOptionPane.showMessageDialog(myPanel, "Blackjack! Pays 3:2");
+					} else {
+						player.recordLoss();
+						JOptionPane.showMessageDialog(myPanel, "Dealer Blackjack");
+					}
 					repaint();
 				}
-			} else if (playerAction && !blackjack.currentPlayerHand.getBust() && x > 20 && x < 147 && y > 243 && y < 298) {
+			} else if (playerAction && x > 20 && x < 147 && y > 243 && y < 298) { // hit
 				blackjack.hit();
 				repaint();
 				if (blackjack.currentPlayerHand.getBust()) {
-					JOptionPane.showMessageDialog(myPanel, "Bust");
 					playerAction = false;
+					determineWinnerBlackjack();
 				}
-			} else if (playerAction && x > 157 && x < 287 && y > 243 && y < 298) {
+			} else if (playerAction && x > 157 && x < 287 && y > 243 && y < 298) { // stand
 				blackjack.stand();
 				playerAction = false;
 				determineWinnerBlackjack();
 				repaint();
-			} else if (playerAction && x > 20 && x < 147 && y > 312 && y < 365) {
-				blackjack.doubleDown();
-				if (blackjack.currentPlayerHand.getBust()) {
-					playerAction = false;
-					JOptionPane.showMessageDialog(myPanel, "Bust");
-					repaint();
-				} else {
-					playerAction = false;
-					determineWinnerBlackjack();
-					repaint();
+			} else if (playerAction && x > 20 && x < 147 && y > 312 && y < 365) { // double down
+				if (!blackjack.canDoubleDown()) {
+					JOptionPane.showMessageDialog(myPanel, "You can only double down on your first two cards with enough balance");
+					return;
 				}
-			} else if (playerAction && blackjack.currentPlayerHand.getPair() && x > 157 && x < 287 && y > 243 && y < 298) {
-
+				blackjack.doubleDown();
+				playerAction = false;
+				determineWinnerBlackjack();
+				repaint();
 			}
 		} else if (screen == 2) {
 			if (baccarat == null) {
@@ -747,11 +766,16 @@ public class Driver extends JPanel implements MouseListener {
 			} else if (x > 960 && x < 990 && y > 710 && y < 745) {
 				screen = 8;
 				repaint();
-			} else if (x > 20 && x < 285 && y > 240 && y < 295) {
+			} else if (x > 20 && x < 285 && y > 240 && y < 295) { // deal
+				if (baccarat.getTotalBets() == 0) {
+					JOptionPane.showMessageDialog(myPanel, "Place a bet first");
+					return;
+				}
 				betting = false;
 				baccarat.generateHands();
-				baccarat.calcWinnings();
+				String result = baccarat.calcWinnings();
 				repaint();
+				JOptionPane.showMessageDialog(myPanel, result);
 			} else if (x > 20 && x < 285 && y > 305 && y < 355) {
 				betting = true;
 				repaint();
@@ -779,17 +803,21 @@ public class Driver extends JPanel implements MouseListener {
 			} else if (x > 960 && x < 990 && y > 710 && y < 745) {
 				screen = 9;
 				repaint();
-			} else if (x > 20 && x < 285 && y > 215 && y < 270) {
+			} else if (x > 20 && x < 285 && y > 215 && y < 270) { // bet
 				bettingOpen = true;
 				bets = poker.getBets();
 				repaint();
 				poker.getPlayerBets();
-				bets = poker.getBets();
 				repaint();
-			} else if (bettingOpen && x > 20 && x < 285 && y > 300 && y < 350) {
+			} else if (bettingOpen && x > 20 && x < 285 && y > 300 && y < 350) { // deal
+				if (poker.getTotalBets() == 0) {
+					JOptionPane.showMessageDialog(myPanel, "Place a bet first");
+					return;
+				}
 				bettingOpen = false;
-				poker.playGame();
+				String result = poker.playGame();
 				repaint();
+				JOptionPane.showMessageDialog(myPanel, result);
 			}
 		} else if (screen == 4) {
 			if (dice == null) {
@@ -803,86 +831,74 @@ public class Driver extends JPanel implements MouseListener {
 			} else if (x > 960 && x < 990 && y > 710 && y < 745) {
 				screen = 10;
 				repaint();
-			} else if (x > 20 && x < 285 && y > 215 && y < 270) {
-				dice.overBet();
-				dice.generateDice();
-				drawDice = true;
-				if (dice.betAmount < dice.diceTotal) {
-					dice.calculateWinnings();
-				}else {
-					player.setLosses(player.getLosses() + 1);
-					player.setProfit(player.getBalance() - player.getInitialBalance());
+			} else if (x > 20 && x < 285 && y > 215 && y < 270) { // over
+				if (dice.overBet()) {
+					String result = dice.resolve();
+					drawDice = true;
+					repaint();
+					JOptionPane.showMessageDialog(myPanel, result);
 				}
-				repaint();
-			} else if (x > 20 && x < 285 && y > 300 && y < 350) {
-				dice.underBet();
-				dice.generateDice();
-				drawDice = true;
-				if (dice.betAmount > dice.diceTotal) {
-					dice.calculateWinnings();
-				} else {
-					player.setLosses(player.getLosses() + 1);
-					player.setProfit(player.getBalance() - player.getInitialBalance());
+			} else if (x > 20 && x < 285 && y > 300 && y < 350) { // under
+				if (dice.underBet()) {
+					String result = dice.resolve();
+					drawDice = true;
+					repaint();
+					JOptionPane.showMessageDialog(myPanel, result);
 				}
-				repaint();
 			}
 		} else if (screen == 5) {
 			if (dragontower == null) {
 				dragontower = new Dragontower(player);
 			}
 			if (x > 870 && x < 980 && y > 15 && y < 75) {
+				if (dragontower.isInProgress()) {
+					JOptionPane.showMessageDialog(myPanel, "Cash out or finish the round first");
+					return;
+				}
 				screen = 0;
 				repaint();
 				dragontower = null;
-				currentRow = 0;
 			} else if (x > 960 && x < 990 && y > 710 && y < 745) {
 				screen = 11;
 				repaint();
-			} else if (x > 20 && x < 285 && y > 215 && y < 270) {
-				dragontower.getBet();
-				dragontower.generateGrid();
-				repaint();
-				currentRow = 8;
-				dragontowerBetting = true;
-				drawRow = false;
-			} else if (dragontowerBetting && x > 450 && x < 874 && y > 243 && y < 693) {
+			} else if (x > 20 && x < 285 && y > 215 && y < 270) { // bet
+				if (dragontower.isInProgress()) {
+					JOptionPane.showMessageDialog(myPanel, "Cash out or finish the round first");
+					return;
+				}
+				if (dragontower.getBet()) {
+					dragontower.generateGrid();
+					repaint();
+				}
+			} else if (dragontower.isInProgress() && x > 450 && x < 874 && y > 243 && y < 693) {
 				int cellRow = dragontower.getCellRow(y);
-				if (cellRow == currentRow) {
+				if (cellRow == dragontower.getCurrentRow()) {
 					int cellCol = dragontower.getCellCol(x);
-					if (dragontower.checkCell(cellRow, cellCol)) {
-						for (int i = 0; i < 4; i++) {
-							dragontowerCheckedCells.add(dragontower.grid.get(currentRow).get(i));
-						}
-						drawRow = true;
-						currentRow--;
+					if (dragontower.checkCell(cellCol)) {
 						repaint();
-						if (currentRow == -1) {
-							currentRow = 0;
-							player.setBalance(player.getBalance() + dragontower.calcPayout(currentRow));
-							player.setWins(player.getWins() + 1);
-							player.setProfit(player.getBalance() - player.getInitialBalance());
+						if (dragontower.isFinished()) {
+							int payout = dragontower.cashOut();
 							repaint();
-							dragontowerBetting = false;
-							repaint();
-							JOptionPane.showMessageDialog(null, "Winner");
+							JOptionPane.showMessageDialog(myPanel, "You reached the top! You won " + payout);
 						}
 					} else {
-						dragontowerBetting = false;
-						player.setLosses(player.getLosses() + 1);
-						player.setProfit(player.getBalance() - player.getInitialBalance());
+						player.recordLoss();
 						repaint();
-						dragontowerCheckedCells.clear();
-						repaint();
+						JOptionPane.showMessageDialog(myPanel, "Dragon egg! You lost");
 					}
 				}
-			} else if (x > 20 && x < 285 && y > 300 && y < 350) {
-				dragontowerBetting = false;
+			} else if (x > 20 && x < 285 && y > 300 && y < 350) { // cash out
+				if (!dragontower.isInProgress()) {
+					JOptionPane.showMessageDialog(myPanel, "Place a bet first");
+					return;
+				}
+				if (dragontower.getRowsCleared() == 0) {
+					JOptionPane.showMessageDialog(myPanel, "Clear at least one row before cashing out");
+					return;
+				}
+				int payout = dragontower.cashOut();
 				repaint();
-				dragontowerCheckedCells.clear();
-				player.setBalance(player.getBalance() + dragontower.calcPayout(currentRow));
-				player.setWins(player.getWins() + 1);
-				player.setProfit(player.getBalance() - player.getInitialBalance());
-				repaint();				
+				JOptionPane.showMessageDialog(myPanel, "Cashed out " + payout);
 			}
 
 		} else if (screen == 6) {
@@ -890,46 +906,62 @@ public class Driver extends JPanel implements MouseListener {
 				mines = new Mines(player);
 			}
 			if (x > 870 && x < 980 && y > 15 && y < 75) {
+				if (minesBetting) {
+					JOptionPane.showMessageDialog(myPanel, "Cash out or finish the round first");
+					return;
+				}
 				screen = 0;
 				repaint();
 				mines = null;
+				minesCheckedCells.clear();
 			} else if (x > 960 && x < 990 && y > 710 && y < 745) {
 				screen = 12;
 				repaint();
-			} else if (x > 20 && x < 285 && y > 215 && y < 270) {
-				mines.getPlayerBet();
-				mines.generateGrid(mines.getDiamonds());
-				repaint();
-				minesBetting = true;
-			} else if (minesBetting && x > 345 && x < 965 && y > 112 && y < 732) {
-				int cell = mines.getCellNum(x, y);
-				if(mines.checkCell(cell)) {
-					minesCheckedCells.add(mines.grid.get(cell - 1));
-					mines.calculateMultiplier(mines.multipliers.get(mines.checkedCells).get(25 - mines.getDiamonds()));
-					if (mines.getCheckedCells() == mines.getDiamonds()) {
-						minesBetting = false;
-						player.setBalance(player.getBalance() + mines.getBet() + (int)(mines.getBet() * mines.getMultiplier()));
-						player.setProfit(player.getBalance() - player.getInitialBalance());
-						player.setWins(player.getWins() + 1);
-						minesCheckedCells.clear();
-						repaint();
-					}
-					repaint();
-				} else {
-					player.setLosses(player.getLosses() + 1);
-					minesBetting = false;
-					repaint();
+			} else if (x > 20 && x < 285 && y > 215 && y < 270) { // bet
+				if (minesBetting) {
+					JOptionPane.showMessageDialog(myPanel, "Cash out or finish the round first");
+					return;
+				}
+				if (mines.getPlayerBet()) {
+					mines.generateGrid(mines.getDiamonds());
 					minesCheckedCells.clear();
+					minesBetting = true;
 					repaint();
 				}
-			} else if (minesBetting && x > 20 && x < 285 && y > 300 && y < 350) {
+			} else if (minesBetting && x > 345 && x < 965 && y > 112 && y < 732) {
+				int cell = mines.getCellNum(x, y);
+				if (cell < 1 || cell > 25 || mines.isChecked(cell)) {
+					return;
+				}
+				if(mines.checkCell(cell)) {
+					minesCheckedCells.add(mines.grid.get(cell - 1));
+					repaint();
+					if (mines.getCheckedCells() == mines.getDiamonds()) {
+						minesBetting = false;
+						int payout = mines.calcPayout();
+						player.recordWin(payout);
+						minesCheckedCells.clear();
+						repaint();
+						JOptionPane.showMessageDialog(myPanel, "You found every diamond! You won " + payout);
+					}
+				} else {
+					minesBetting = false;
+					player.recordLoss();
+					minesCheckedCells.clear();
+					repaint();
+					JOptionPane.showMessageDialog(myPanel, "Mine! You lost");
+				}
+			} else if (minesBetting && x > 20 && x < 285 && y > 300 && y < 350) { // cash out
+				if (mines.getCheckedCells() == 0) {
+					JOptionPane.showMessageDialog(myPanel, "Find at least one diamond before cashing out");
+					return;
+				}
 				minesBetting = false;
-				player.setBalance(player.getBalance() + (int)(mines.getBet() * mines.getMultiplier()));
-				player.setProfit(player.getBalance() - player.getInitialBalance());
-				player.setWins(player.getWins() + 1);
-				repaint();
+				int payout = mines.calcPayout();
+				player.recordWin(payout);
 				minesCheckedCells.clear();
 				repaint();
+				JOptionPane.showMessageDialog(myPanel, "Cashed out " + payout);
 			}
 		} else if (screen == 7) {
 			if (x > 870 && x < 980 && y > 15 && y < 75) {
@@ -967,8 +999,11 @@ public class Driver extends JPanel implements MouseListener {
 				repaint();
 			}
 		}
+		if (selectedPlayer) {
+			savePlayers(); // persist balances after every action
+		}
 	}
-	
+
 	public void mousePressed(MouseEvent e) {}
 
 	public void mouseReleased(MouseEvent e) {}
@@ -979,12 +1014,18 @@ public class Driver extends JPanel implements MouseListener {
 	
 	// main
 	public static void main(String[] args) {
+		initializePlayers();
 		Driver myPanel = new Driver();
-		JFrame frame = new JFrame("Poker Home Screen");
+		JFrame frame = new JFrame("Stake");
 		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE); // Ensure the program exits when the window is closed
+		frame.addWindowListener(new WindowAdapter() {
+			@Override
+			public void windowClosing(WindowEvent e) {
+				savePlayers(); // keep balances between runs
+			}
+		});
 		frame.add(myPanel);
 		frame.pack();
 		frame.setVisible(true);
-		initializePlayers();
 	}
 }

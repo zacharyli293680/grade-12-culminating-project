@@ -2,16 +2,14 @@
 
 // imports
 import java.util.*;
-import java.io.*;
 
 // hand class
 public class Hand {
 
 	// fields and global variables
 	private static final Set<String> HIGH_RANKS = new HashSet<>(Arrays.asList("Jack", "Queen", "King", "Ace"));
-	private String[] pokerHands = {"Royal Flush", "Straight Flush", "Four of a Kind", "Full House", "Flush",
-			"Straight", "Three of a Kind", "Two Pair", "Pair", "High Card"};
-	private Set<String> royalRanks = new HashSet<>(Arrays.asList("10", "Jack", "Queen", "King", "Ace"));
+	public static final String[] POKER_HANDS = {"Royal Flush", "Straight Flush", "Four of a Kind", "Full House", "Flush",
+			"Straight", "Three of a Kind", "Two Pair", "Pair (Jacks or better)", "High Card"};
 	ArrayList<Card> handCards = new ArrayList<Card>();
 	Deck deck;
 	private int bet = 0;
@@ -23,7 +21,6 @@ public class Hand {
 	private boolean hasPair;
 	private boolean hasBlackjack;
 	private boolean bust;
-	private boolean natural;
 
 	// constructor
 	public Hand(String game, Deck deck) {
@@ -37,12 +34,13 @@ public class Hand {
 			generatePokerHand();
 			this.hasAce = checkAce();
 			this.value = determineHandStrength();
+			this.handStrength = POKER_HANDS[value - 1];
 		} else if (game.equals("Baccarat")) { // for baccarat
 			generateBaccaratHand();
 			handValueBaccarat();
 		}
 	}
-	
+
 	// generates a hand for blackjack
 	// parameters: none
 	// return: void
@@ -51,7 +49,7 @@ public class Hand {
 		handCards.add(deck.nextCard());
 		hasPair = checkPairBlackjack();
 	}
-	
+
 	// generates a hand for poker
 	// parameters: none
 	// return: void
@@ -60,7 +58,7 @@ public class Hand {
 			handCards.add(deck.nextCard());
 		}
 	}
-	
+
 	// generates a hand for baccarat
 	// parameters: none
 	// return: void
@@ -68,7 +66,7 @@ public class Hand {
 		handCards.add(deck.nextCard());
 		handCards.add(deck.nextCard());
 	}
-	
+
 	// checks hand for an ace
 	// parameters: none
 	// return: boolean for if ace is present
@@ -80,80 +78,71 @@ public class Hand {
 		}
 		return false;
 	}
-	
-	// checks for blackjack
+
+	// checks for a pair (used for splitting)
 	// parameters: none
-	// return: boolean for if there is a blackjack
+	// return: boolean for if the first two cards share a rank
 	public boolean checkPairBlackjack() {
 		if (handCards.get(0).getRank().equals(handCards.get(1).getRank())) {
 			return true;
 		}
 		return false;
 	}
-	
-	// checks for blackjack
+
+	// checks for a natural blackjack (21 with the first two cards)
 	// parameters: none
 	// return: void
 	public void checkBlackjack() {
-		if (handCards.get(0).getValue() + handCards.get(1).getValue() == 21) {
-			hasBlackjack = true;
-		} else {
-			hasBlackjack = false;
-		}
+		hasBlackjack = handCards.size() == 2 && value == 21;
 	}
-	
+
 	// determines hand value for a baccarat hand
 	// parameters: none
 	// return: void
 	public void handValueBaccarat() {
 		value = 0;
 		for (int i = 0; i < handCards.size(); i++) {
-			int cardValue = handCards.get(i).getValue() % 10;
-			value = (value + cardValue) % 10;
+			value = (value + handCards.get(i).getValue()) % 10;
 		}
 	}
-	
-	// determines value of a blackjack hand
+
+	// determines value of a blackjack hand (an ace counts 11 unless that busts)
 	// parameters: none
 	// return: void
 	public void handValueBlackjack() {
 		value = 0;
 		int aceCount = 0;
 		for (int i = 0; i < handCards.size(); i++) {
-			int tempValue = handCards.get(i).getValue();
-			if (tempValue == 1) {
-				value += 10;
-				aceCount++;	
+			int cardValue = handCards.get(i).getValue();
+			if (cardValue == 1) {
+				aceCount++;
 			}
-			value += handCards.get(i).getValue();
-			while (value > 21 && aceCount > 0) {
-				value -= 10;
-				aceCount--;	
-			}
+			value += cardValue;
+		}
+		if (aceCount > 0 && value + 10 <= 21) {
+			value += 10;
 		}
 		checkBlackjack();
-		if (value > 21) {
-			bust = true;
-		} else {
-			bust = false;
-		}
+		bust = value > 21;
 	}
-	
+
 	// determines the value of a poker hand
 	// parameters: none
-	// return: int for hand strength
+	// return: int for hand strength (1 = royal flush ... 10 = high card)
 	public int determineHandStrength() {
-		if (checkRoyalFlush()) {
+		boolean flush = checkFlush();
+		boolean straight = checkStraight();
+		if (flush && straight && aceHighStraight) {
 			return 1;
-		} else if (checkStraightFlush()) {
+		} else if (flush && straight) {
 			return 2;
 		} else if (checkQuads()) {
 			return 3;
 		} else if (checkFullHouse()) {
 			return 4;
-		} else if (checkFlush()) {
+		} else if (flush) {
 			return 5;
-		} else if (checkStraight()) {
+		} else if (straight) {
 			return 6;
 		} else if (checkTrips()) {
 			return 7;
@@ -178,17 +167,13 @@ public class Hand {
 
 	private boolean checkPairJacksPlus() {
 		Map<String, Integer> rankCount = getRankCount();
-
 		for (Map.Entry<String, Integer> entry : rankCount.entrySet()) {
-			String rank = entry.getKey();
-			int count = entry.getValue();
-			if (count == 2 && HIGH_RANKS.contains(rank)) {
+			if (entry.getValue() == 2 && HIGH_RANKS.contains(entry.getKey())) {
 				return true;
 			}
 		}
 		return false;
 	}
-
 
 	private boolean checkTwoPair() {
 		Map<String, Integer> rankCount = getRankCount();
@@ -222,16 +207,13 @@ public class Hand {
 	}
 
 	public boolean checkFlush() {
-		boolean flush = true;
 		String suit = handCards.get(0).getSuit();
-		System.out.println(suit);
-		for (int i = 1; i < 5; i++) {
-			System.out.println(handCards.get(i).getSuit());
-			if(!(suit.equalsIgnoreCase(handCards.get(i).getSuit()))) {
-				flush = false;
+		for (int i = 1; i < handCards.size(); i++) {
+			if(!suit.equals(handCards.get(i).getSuit())) {
+				return false;
 			}
 		}
-		return flush;
+		return true;
 	}
 
 	private boolean checkFullHouse() {
@@ -249,41 +231,26 @@ public class Hand {
 		return hasTrips && hasPair;
 	}
 
+	// checks for a straight; the ace can be low (A-2-3-4-5) or high (10-J-Q-K-A)
 	private boolean checkStraight() {
-		boolean isStraight = true;
 		int[] values = new int[5];
 		for (int i = 0; i < 5; i++) {
-			values[i] = (handCards.get(i).getNum() - 1)%13;
-			System.out.println(values[i]);
+			values[i] = handCards.get(i).getRankIndex(); // Ace = 0 ... King = 12
 		}
 		Arrays.sort(values);
+		boolean consecutive = true;
 		for (int i = 1; i < values.length; i++) {
 			if(values[i] != values[i - 1] + 1) {
-				isStraight = false;
+				consecutive = false;
 				break;
 			}
 		}
-		if (isStraight) {
+		if (consecutive) {
 			aceHighStraight = false;
 			return true;
 		}
-
 		if (values[0] == 0 && values[1] == 9 && values[2] == 10 && values[3] == 11 && values[4] == 12) {
 			aceHighStraight = true;
-			return true;
-		}
-		return false;
-	}
-
-	private boolean checkStraightFlush() {
-		if (checkStraight() && checkFlush()) {
-			return true;
-		}
-		return false;
-	}
-
-	private boolean checkRoyalFlush() {
-		if(checkStraightFlush() && aceHighStraight) {
 			return true;
 		}
 		return false;
@@ -293,9 +260,8 @@ public class Hand {
 	// parameters: none
 	// return: void
 	public void hit() {
-		Card c = deck.nextCard();
-		handCards.add(c);
-		value += c.getValue();
+		handCards.add(deck.nextCard());
+		handValueBlackjack();
 	}
 
 	// getters and setters
@@ -317,18 +283,18 @@ public class Hand {
 	public boolean getBust() {
 		return bust;
 	}
-	
+
 	public int getBet() {
 		return bet;
 	}
-	
+
 	public void setBet(int bet) {
 		this.bet = bet;
 	}
 	public ArrayList<Card> getCards(){
 		return handCards;
 	}
-	
+
 	// for printing while testing
 	public void printHand() {
 		for (int i = 0; i < handCards.size(); i++) {

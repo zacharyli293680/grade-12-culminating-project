@@ -2,13 +2,10 @@
 
 // imports
 import java.util.*;
-import java.io.*;
-import java.awt.*;
-import javax.swing.*;
 
 // poker class
-public class Poker {
-	
+public class Poker extends Game {
+
 	// fields
 	public Player player;
 	public Hand hand;
@@ -26,17 +23,17 @@ public class Poker {
 		put(9, 7);
 		put(10, 0);
 	}};
-	
+
 	// constructor
 	public Poker (Player player) {
 		this.player = player;
 		this.deck = new Deck(1, "Poker");
 		resetBets();
 	}
-	
+
 	// gets the total amount bet from all hands
 	// parameters: none
-	// return: void
+	// return: int total
 	public int getTotalBets() {
 		int betAmount = 0;
 		for (Integer i : bets.values()) {
@@ -44,29 +41,42 @@ public class Poker {
 		}
 		return betAmount;
 	}
-	
-	// players poker game
+
+	// deals a hand and settles the bets
 	// parameters: none
-	// return: void
-	public void playGame() {
+	// return: String describing the result
+	public String playGame() {
 		deck.shuffle();
 		hand = new Hand("Poker", deck);
-		determinePayout();
-		resetBets();
-	}
-	
-	// determines the payout given the hand
-	// parameters: none
-	// return: void
-	public void determinePayout(){
-		int totalPayout = 0;
-		if (hand.getValue() < 10) {
-			totalPayout = bets.get(hand.getValue()) * payouts.get(hand.getValue());
+		long payout = determinePayout();
+		String result = "You got: " + hand.getHandStrength();
+		if (payout > 0) {
+			player.recordWin(payout);
+			result += "\nYou won " + payout;
+		} else if (getTotalBets() > 0) {
+			player.recordLoss();
+			result += "\nNo bet on that hand - you lost";
 		}
-		player.setBalance(player.getBalance() + totalPayout);
+		resetBets();
+		return result;
 	}
 
-	// resets the bets 
+	// determines the payout given the hand (stake + profit on the matching bet)
+	// parameters: none
+	// return: long payout
+	public long determinePayout(){
+		int rank = hand.getValue();
+		if (rank >= 10) {
+			return 0;
+		}
+		int bet = bets.get(rank);
+		if (bet == 0) {
+			return 0;
+		}
+		return (long) bet + (long) bet * payouts.get(rank);
+	}
+
+	// resets the bets
 	// parameters: none
 	// return: void
 	public void resetBets() {
@@ -76,66 +86,39 @@ public class Poker {
 		}
 	}
 
-	// gets all the card numbers in hand
+	// gets the image numbers of all cards in hand
 	// parameters: none
-	// return: void
+	// return: int array of image numbers (1-52)
 	public int[] getCardNums() {
 		int[] cardNums = new int[5];
 		for (int i = 0; i < 5; i++) {
-			cardNums[i] = hand.getCards().get(i).getNum();
+			cardNums[i] = hand.getCards().get(i).getImageNum();
 		}
 		return cardNums;
 	}
 
-	// deals the hand
-	// parameters: graphics, panel
-	// return: void
-	public void dealHand(Graphics g, Panel myPanel) {
-		Toolkit t = Toolkit.getDefaultToolkit();
-		Image cardBack = t.getImage("CardBack.png");
-		g.drawImage(cardBack, 100, 100, 100, 150, myPanel);
-	}
-	
 	// gets the bets and the hand type from player
 	// parameters: none
-	// return: void
-	public void getPlayerBets() {
-		Integer handKey = 1;
-		Integer betAmount = 0;
-		
-		// for hand type
-		boolean validInput1 = false;
-		while (!validInput1) {
-			try {
-				handKey = Integer.parseInt(JOptionPane.showInputDialog("Enter hand strength (1-9): "));
-				if (handKey > 0 && handKey < 10) {
-					validInput1 = true;
-				}
-			} catch (NumberFormatException e) {
-				JOptionPane.showMessageDialog(null, "Invalid Input");
-			}
+	// return: boolean for whether a bet was placed
+	public boolean getPlayerBets() {
+		StringBuilder prompt = new StringBuilder("Enter the hand to bet on:\n");
+		for (int i = 1; i <= 9; i++) {
+			prompt.append(i).append(" = ").append(Hand.POKER_HANDS[i - 1]).append(" (pays ").append(payouts.get(i)).append(":1)\n");
 		}
-		
-		// for bet
-		boolean validInput2 = false;
-		while (!validInput2) {
-			try {
-				betAmount = Integer.parseInt(JOptionPane.showInputDialog("Enter bet: "));
-				if (betAmount > 0 && betAmount < player.getBalance()) {
-					validInput2 = true;
-				}
-			} catch (NumberFormatException e) {
-				JOptionPane.showMessageDialog(null, "Invalid Input");
-			}
+		int handKey = promptInt(prompt.toString(), 1, 9);
+		if (handKey < 0) {
+			return false;
 		}
-		player.setBalance(player.getBalance() - betAmount);
+		int betAmount = promptBet(player, "Enter bet on " + Hand.POKER_HANDS[handKey - 1] + ": ");
+		if (betAmount < 0) {
+			return false;
+		}
 		bets.put(handKey, bets.getOrDefault(handKey, 0) + betAmount);
+		return true;
 	}
 
 	// getters
 	public Map<Integer, Integer> getBets() {
 		return bets;
 	}
-
-
 }
