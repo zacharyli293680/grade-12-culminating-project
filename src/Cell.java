@@ -2,7 +2,6 @@
 
 // imports
 import java.util.*;
-import java.io.*;
 
 // cell class
 public class Cell {
@@ -11,9 +10,6 @@ public class Cell {
 	private int cellNum;
 	private boolean diamond;
 	private boolean checked;
-	private static int numDiamonds = 0;
-	private static int numMines = 0;
-	public static int checkedCells = 0;
 	private int cellCol;
 	private int cellRow;
 	private boolean egg;
@@ -23,11 +19,6 @@ public class Cell {
 		this.checked = false;
 		this.cellNum = cellNum;
 		this.diamond = diamond;
-		if (diamond) {
-			numDiamonds++;
-		} else {
-			numMines++;
-		}
 	}
 	
 	// constructor (dragon tower)
@@ -60,32 +51,26 @@ public class Cell {
 	}
 	
 	// hashcode
-	public int hashCode(Cell c) {
-		return Objects.hash(c);
+	@Override
+	public int hashCode() {
+		return Objects.hash(cellNum, cellCol, cellRow);
 	}
 	
 	// equals
-	public boolean equals(Cell c) {
-		if (this.cellNum == c.cellNum) {
-			return true;
+	@Override
+	public boolean equals(Object o) {
+		if (!(o instanceof Cell)) {
+			return false;
 		}
-		return false;
+		Cell c = (Cell) o;
+		return this.cellNum == c.cellNum && this.cellCol == c.cellCol && this.cellRow == c.cellRow;
 	}
 	
 	// toString
 	public String toString() {
-		if (egg) {
-			return "egg";
-		} else {
-			return "empty";
+		if (cellNum > 0) {
+			return diamond ? "diamond" : "mine";
 		}
+		return egg ? "egg" : "empty";
 	}
-	/*
-	public String toString() {
-		if (diamond) {
-			return "diamond";
-		}
-		return "mine";
-	}
-	*/
 }

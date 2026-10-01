@@ -2,124 +2,88 @@
 
 // imports
 import java.util.*;
-import java.io.*;
-import java.awt.*;
-import javax.swing.*;
 
 // dice class
-public class Dice {
-	
+public class Dice extends Game {
+
 	// fields
+	private static final int NUM_DICE = 6;
+	private static final int NUM_SIDES = 6;
+	private static final double TOTAL_OUTCOMES = Math.pow(NUM_SIDES, NUM_DICE);
 	public Player player;
 	public int bet;
 	public int betAmount;
 	public int diceTotal;
 	public boolean over;
-	public ArrayList<Integer> diceValues = new ArrayList<Integer>(); 
-	public TreeMap<Integer, Integer> multipliers;
-	
+	public ArrayList<Integer> diceValues = new ArrayList<Integer>();
+	public TreeMap<Integer, Integer> multipliers; // number of ways to roll each total
+
 	// constructor
 	public Dice(Player player) {
 		this.player = player;
-		generateDice();
 		multipliers = initializeMultipliers();
+		generateDice();
 	}
-	
+
 	// generates the values of the 6 dice
 	// parameters: none
 	// return: void
 	public void generateDice() {
-		if (diceValues != null) {
-			diceValues.clear();
-		}
-		for (int i = 0; i < 6; i++) {
-			diceValues.add((int)(Math.random()*(6 - 1) + 1));
+		diceValues.clear();
+		for (int i = 0; i < NUM_DICE; i++) {
+			diceValues.add((int)(Math.random() * NUM_SIDES) + 1);
 		}
 		countTotal();
 	}
-	
+
 	// counts the total of the dice values
 	// parameters: none
-	// return: void
+	// return: int total
 	public int countTotal() {
 		diceTotal = 0;
-		for (int i = 0; i < 6; i++) {
+		for (int i = 0; i < NUM_DICE; i++) {
 			diceTotal += diceValues.get(i);
 		}
 		return diceTotal;
 	}
-	
-	// gets over bets
+
+	// gets an over bet (wins when the total is strictly over the chosen number)
 	// parameters: none
-	// return: void
-	public void overBet() {
-		
-		// getting bet
-		boolean validInput1 = false;
-		while (!validInput1) {
-			try {
-				bet = Integer.parseInt(JOptionPane.showInputDialog("Enter bet: "));
-				if (bet > 0 && bet < player.getBalance()) {
-					validInput1 = true;
-				}
-			} catch (NumberFormatException e) {
-				JOptionPane.showMessageDialog(null, "Invalid Input");
-			}
+	// return: boolean for whether a bet was placed
+	public boolean overBet() {
+		int number = promptInt("Enter over number (6 - 35): ", 6, 35);
+		if (number < 0) {
+			return false;
+		}
+		int amount = promptBet(player, "Enter bet: ");
+		if (amount < 0) {
+			return false;
 		}
 		over = true;
-		
-		// getting dice amount
-		boolean validInput2 = false;
-		while (!validInput2) {
-			try {
-				betAmount = Integer.parseInt(JOptionPane.showInputDialog("Enter over number(6 - 35): "));
-				if (betAmount > 5 && betAmount < 36) {
-					validInput2 = true;
-				}
-			} catch (NumberFormatException e) {
-				JOptionPane.showMessageDialog(null, "Invalid Input");
-			}
-		}
-		player.setBalance(player.getBalance() - bet);
-		player.setWagered(player.getWagered() + bet);
+		betAmount = number;
+		bet = amount;
+		return true;
 	}
-	
-	// gets the under bet
+
+	// gets an under bet (wins when the total is strictly under the chosen number)
 	// parameters: none
-	// return: void
-	public void underBet() {
-		
-		// getting bet
-		boolean validInput1 = false;
-		while (!validInput1) {
-			try {
-				bet = Integer.parseInt(JOptionPane.showInputDialog("Enter bet: "));
-				if (bet > 0 && bet < player.getBalance()) {
-					validInput1 = true;
-				}
-			} catch (NumberFormatException e) {
-				JOptionPane.showMessageDialog(null, "Invalid Input");
-			}
+	// return: boolean for whether a bet was placed
+	public boolean underBet() {
+		int number = promptInt("Enter under number (7 - 36): ", 7, 36);
+		if (number < 0) {
+			return false;
+		}
+		int amount = promptBet(player, "Enter bet: ");
+		if (amount < 0) {
+			return false;
 		}
 		over = false;
-		
-		// getting dice amount
-		boolean validInput2 = false;
-		while (!validInput2) {
-			try {
-				betAmount = Integer.parseInt(JOptionPane.showInputDialog("Enter under number(7 - 36): "));
-				if (betAmount > 7 && betAmount < 37) {
-					validInput2 = true;
-				}
-			} catch (NumberFormatException e) {
-				JOptionPane.showMessageDialog(null, "Invalid Input");
-			}
-		}
-		player.setBalance(player.getBalance() - bet);
-		player.setWagered(player.getWagered() + bet);
+		betAmount = number;
+		bet = amount;
+		return true;
 	}
-	
-	// counts the total combinations for the multiplier
+
+	// counts the number of ways the dice can add to a target sum
 	// parameters: int number of dice, int number of sides, int target sum
 	// return: long for number of combinations
 	public static long countCombinations(int numDice, int numSides, int targetSum) {
@@ -142,52 +106,70 @@ public class Dice {
         }
         return dpPrev[targetSum];
     }
-	
-	// initializes map of multipliers
+
+	// initializes map of how many ways each total can be rolled
 	// parameters: none
-	// return: treemap of multipliers
+	// return: treemap of totals to combination counts
 	public static TreeMap<Integer, Integer> initializeMultipliers(){
 		TreeMap<Integer, Integer> mapa = new TreeMap<Integer, Integer>();
-		for (int i = 6; i < 37; i++) {
-			mapa.put(i, (int)(countCombinations(6, 6, i)));
+		for (int i = NUM_DICE; i <= NUM_DICE * NUM_SIDES; i++) {
+			mapa.put(i, (int)(countCombinations(NUM_DICE, NUM_SIDES, i)));
 		}
 		return mapa;
 	}
-	
-	// calculates multiplier
+
+	// calculates the fair multiplier for the current bet (1 / probability of winning)
 	// parameters: none
-	// return: double multiplier
+	// return: double multiplier applied to the stake
 	public double calculateMultiplier() {
-		int odds = 0;
+		if (betAmount == 0) {
+			return 0;
+		}
+		long favourable = 0;
 		if (over) {
-			for (int i = 36; i > betAmount; i--) {
-				odds += multipliers.get(i);
+			for (int i = betAmount + 1; i <= NUM_DICE * NUM_SIDES; i++) {
+				favourable += multipliers.get(i);
 			}
 		} else {
-			for (int i = 6; i < betAmount; i++) {
-				odds += multipliers.get(i);
+			for (int i = NUM_DICE; i < betAmount; i++) {
+				favourable += multipliers.get(i);
 			}
 		}
-		return Math.round((odds/Math.pow(6, 6))*100.0)/100.0;
+		if (favourable == 0) {
+			return 0;
+		}
+		return Math.round((TOTAL_OUTCOMES / favourable) * 100.0) / 100.0;
 	}
-	
-	// calculates winnings
+
+	// checks whether the current roll wins the current bet
 	// parameters: none
-	// return: void
-	public void calculateWinnings() {
-		double multiplier = calculateMultiplier();
-		player.setBalance(player.getBalance() + bet + (int)(bet * multiplier));
-		player.setWins(player.getWins() + 1);
-		player.setProfit(player.getBalance() - player.getInitialBalance());
+	// return: boolean
+	public boolean isWin() {
+		return over ? diceTotal > betAmount : diceTotal < betAmount;
 	}
-	
+
+	// rolls the dice and settles the bet
+	// parameters: none
+	// return: String describing the result
+	public String resolve() {
+		generateDice();
+		String result = "Rolled " + diceTotal + " (" + (over ? "over " : "under ") + betAmount + ")";
+		if (isWin()) {
+			long payout = Math.round(bet * calculateMultiplier());
+			player.recordWin(payout);
+			return result + "\nYou won " + payout;
+		}
+		player.recordLoss();
+		return result + "\nYou lost";
+	}
+
 	//getters and setters
 	public int getBets() {
 		return bet;
 	}
-	
+
 	public int getDiceTotal() {
 		return diceTotal;
 	}
-	
+
 }

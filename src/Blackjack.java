@@ -2,58 +2,45 @@
 
 //imports
 import java.util.*;
-import javax.swing.JOptionPane;
-import java.io.*;
 
 // blackjack class
 public class Blackjack extends Game {
-	
+
 	//variables
 	public Player player;
 	public Deck deck;
 	public ArrayList<Hand> playerHands = new ArrayList<Hand>();
 	public Hand currentPlayerHand;
 	public Hand dealerHand;
-	public Hand playerHand;
 	public int bet;
-	Scanner in = new Scanner(System.in);
 
 	// constructor
 	public Blackjack (Player player) {
 		this.player = player;
 		this.deck = new Deck(6, "Blackjack");
 	}
-	
-	// gets player bets
+
+	// gets the player bet and deducts it
 	// parameters: none
-	// return: void
-	public void getPlayerBet() {
-		boolean validInput = false;
-		while (!validInput) {
-			try {
-				bet = Integer.parseInt(JOptionPane.showInputDialog("Enter bet: "));
-				if (bet > 0 && bet < player.getBalance()) {
-					validInput = true;
-				}
-			} catch (NumberFormatException e) {
-				JOptionPane.showMessageDialog(null, "Invalid Input");
-			}
+	// return: boolean for whether a bet was placed
+	public boolean getPlayerBet() {
+		int amount = promptBet(player, "Enter bet: ");
+		if (amount < 0) {
+			return false;
 		}
-		player.setBalance(player.getBalance() - bet);
-		player.setWagered(player.getWagered() + bet);
+		bet = amount;
+		return true;
 	}
-	
-	// initializes hands at the beggining of every round
+
+	// initializes hands at the beginning of every round
 	// parameters: none
 	// return: void
 	public void initializeHands() {
-		if (playerHands != null) {
-			playerHands.clear();
-		}
+		playerHands.clear();
 		generatePlayerHand();
 		generateDealerHand();
 	}
-	
+
 	// generates the players hand
 	// parameters: none
 	// return: void
@@ -69,44 +56,50 @@ public class Blackjack extends Game {
 	public void generateDealerHand() {
 		dealerHand = new Hand("Blackjack", deck);
 	}
-	
-	// for when the player's action is hit
+
+	// for when the player action is hit
 	// parameters: none
 	// return: void
 	public void hit() {
-		currentPlayerHand.getCards().add(deck.nextCard());
-		currentPlayerHand.handValueBlackjack();
+		currentPlayerHand.hit();
 	}
-	
-	// for when the player's action is stand
+
+	// for when the player action is stand
 	// parameters: none
 	// return: void
 	public void stand() {
 		dealerDraw();
 	}
-	
-	// draws cards for the dealer until the hand value is over 17
+
+	// draws cards for the dealer until the hand value is 17 or more
 	// parameters: none
 	// return: void
 	public void dealerDraw() {
 		while (dealerHand.getValue() < 17) {
-			dealerHand.getCards().add(deck.nextCard());
-			dealerHand.handValueBlackjack();
+			dealerHand.hit();
 		}
 	}
-	
-	
-	// for when the player's action is double dcown
+
+	// checks whether the player is allowed to double down
+	// parameters: none
+	// return: boolean
+	public boolean canDoubleDown() {
+		return currentPlayerHand.getCards().size() == 2 && player.getBalance() >= bet;
+	}
+
+	// for when the player action is double down: doubles the bet, takes one card, then the dealer plays
 	// parameters: none
 	// return: void
 	public void doubleDown() {
+		player.placeBet(bet);
+		bet *= 2;
+		currentPlayerHand.setBet(bet);
 		hit();
-		dealerDraw();
-		player.setBalance(player.getBalance() - bet);
-		this.bet *= 2;
+		if (!currentPlayerHand.getBust()) {
+			dealerDraw();
+		}
 	}
 
-	
 	// getters and setters
 	public int getTotalBet() {
 		return bet;
@@ -114,14 +107,5 @@ public class Blackjack extends Game {
 
 	public void setBet(int bet) {
 		this.bet = bet;
-	}
-	
-	// draws cards for the dealer until the hand value is over 17
-	// parameters: none
-	// return: void
-	public void dealerTurn() {
-		while (dealerHand.getValue() < 17) {
-			dealerHand.hit();
-		}
 	}
 }
