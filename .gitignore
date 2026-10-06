@@ -1,0 +1,23 @@
+# Build output
+target/
+bin/
+out/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+
+# Runtime save file (seeded from src/main/resources/players.txt on first run)
+/players.txt
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+*.launch
+
+# OS
+.DS_Store
+Thumbs.db

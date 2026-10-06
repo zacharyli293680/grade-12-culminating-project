@@ -1,0 +1,10 @@
+* text=auto
+
+# Maven Wrapper scripts must keep their native line endings
+mvnw text eol=lf
+*.cmd text eol=crlf
+
+# Binary assets
+*.png binary
+*.wav binary
+*.jar binary
